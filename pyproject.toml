@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fraudshield"
+version = "1.0.0"
+description = "Real-time card fraud detection: training, serving and monitoring"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "numpy", "pandas", "scikit-learn>=1.6", "joblib", "pydantic>=2",
+  "PyYAML", "matplotlib", "starlette", "uvicorn",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "requests"]
+
+[project.scripts]
+fraudshield = "fraudshield.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

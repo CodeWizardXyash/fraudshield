@@ -1,0 +1,8 @@
+.git
+data
+models
+reports
+__pycache__
+*.egg-info
+.venv
+.env

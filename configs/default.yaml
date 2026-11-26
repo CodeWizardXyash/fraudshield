@@ -1,0 +1,15 @@
+data:
+  n_customers: 2000
+  n_days: 180
+  fraud_episodes_per_day: 4.0
+  seed: 42
+split:            # chronological, cumulative fractions
+  train_end: 0.6
+  selection_end: 0.7
+  calibration_end: 0.8
+cost:
+  review_cost: 5.0
+gate:
+  min_pr_auc: 0.5
+  max_regression: 0.02
+seed: 42
