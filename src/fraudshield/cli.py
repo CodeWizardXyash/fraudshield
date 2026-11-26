@@ -42,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
     p = commands.add_parser("serve", help="run the HTTP API")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--state-db", default=None,
+                   help="path to SQLite database for persistent customer state")
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -83,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
         # Must be set before scikit-learn loads: thread pools slow single-row scoring.
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+        if args.state_db:
+            os.environ["FRAUDSHIELD_STATE_DB"] = args.state_db
         import uvicorn
 
         # One worker only: customer state lives in process memory.

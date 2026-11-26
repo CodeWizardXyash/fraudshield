@@ -139,5 +139,8 @@ def create_app(service: ScoringService, api_key: str | None = None) -> Starlette
 def app_factory() -> Starlette:
     """Entry point for `uvicorn --factory`."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    service = ScoringService.from_registry(os.getenv("FRAUDSHIELD_MODELS", "models"))
+    service = ScoringService.from_registry(
+        os.getenv("FRAUDSHIELD_MODELS", "models"),
+        state_db=os.getenv("FRAUDSHIELD_STATE_DB"),
+    )
     return create_app(service, os.getenv("FRAUDSHIELD_API_KEY"))

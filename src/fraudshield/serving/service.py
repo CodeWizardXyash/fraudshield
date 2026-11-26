@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections import OrderedDict, deque
 from pathlib import Path
 
 import pandas as pd
 
-from fraudshield.features.store import FEATURE_NAMES
+from fraudshield.features.store import FEATURE_NAMES, FeatureStore
 from fraudshield.models import registry
 from fraudshield.monitoring.drift import drift_report
 from fraudshield.schema import Transaction
 
+log = logging.getLogger(__name__)
 EXPLAINED = [f for f in FEATURE_NAMES if f not in ("category_code", "history_length", "hour")]
 
 
@@ -35,8 +37,31 @@ class ScoringService:
         self._lock = threading.Lock()
 
     @classmethod
-    def from_registry(cls, root: str | Path) -> ScoringService:
-        return cls(*registry.load_champion(Path(root)))
+    def from_registry(cls, root: str | Path, state_db: str | None = None) -> ScoringService:
+        """Load champion model, optionally with SQLite-backed state persistence.
+
+        When ``state_db`` is set, the in-memory FeatureStore is replaced with a
+        SQLiteFeatureStore that writes through to the given database path.  On
+        restart the service resumes from the persisted customer history instead
+        of falling back to the training snapshot.
+        """
+        bundle, metadata = registry.load_champion(Path(root))
+        if state_db:
+            from fraudshield.features.sqlite_store import SQLiteFeatureStore
+
+            # Merge training-time state into the SQLite store
+            training_store: FeatureStore = bundle["feature_store"]
+            sqlite_store = SQLiteFeatureStore(state_db)
+            # Only seed customers not already in the database
+            for cid, state in training_store.customers.items():
+                if cid not in sqlite_store.customers:
+                    sqlite_store.customers[cid] = state
+            bundle["feature_store"] = sqlite_store
+            log.info(
+                "using SQLite persistence at %s (%d customers loaded)",
+                state_db, sqlite_store.customer_count(),
+            )
+        return cls(bundle, metadata)
 
     def score(self, txn: Transaction) -> dict:
         """Score and record one transaction. Retries of the same request are idempotent."""
