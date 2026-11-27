@@ -1,7 +1,5 @@
 """Tests for SQLite-backed feature store persistence."""
 
-import os
-
 import pytest
 
 from conftest import make_txn
@@ -16,9 +14,9 @@ def test_sqlite_store_persists_across_instances(tmp_path):
     store1 = SQLiteFeatureStore(db)
     txn1 = make_txn(0, minutes=0)
     txn2 = make_txn(1, minutes=5)
-    f1 = store1.compute(txn1)
+    store1.compute(txn1)
     store1.update(txn1)
-    f2 = store1.compute(txn2)
+    store1.compute(txn2)
     store1.update(txn2)
     assert store1.customer_count() == 1
     store1.close()

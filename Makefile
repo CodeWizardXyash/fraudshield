@@ -1,4 +1,4 @@
-.PHONY: setup data train test lint serve demo monitor docker
+.PHONY: setup data train test lint serve demo monitor tune-threshold docker
 
 setup:
 	pip install -r requirements-dev.txt && pip install --no-deps -e .
@@ -18,11 +18,17 @@ lint:
 serve:
 	fraudshield serve
 
+serve-persist:
+	fraudshield serve --state-db state/customers.db
+
 demo:
 	python scripts/demo.py
 
 monitor:
 	fraudshield monitor --data data/transactions.csv.gz --since 2026-06-01
+
+tune-threshold:
+	fraudshield tune-threshold
 
 docker:
 	docker compose up --build

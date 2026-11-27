@@ -1,12 +1,14 @@
-# FraudShield: real-time card fraud detection
+# FraudShield: Production-Style Real-Time Fraud Scoring Service
 
 An end-to-end ML system that scores card transactions before approval: data simulation,
-leakage-safe features, model selection, probability calibration, cost-based decisions,
-a model registry, an HTTP API and drift monitoring.
+leakage-safe features, model selection (including LightGBM), probability calibration,
+cost-based decisions, a model registry, an HTTP API, SQLite-backed customer state
+persistence, a business-cost threshold tuner, and drift monitoring.
 
 > **Data disclaimer:** all data is **synthetic**, produced by `fraudshield.data.simulate`.
-> The metrics show that the pipeline works on this simulator. They say nothing about
-> performance on real card traffic. This is a portfolio project and has not run in production.
+> Evaluation metrics come from a synthetic transaction simulator and show that the pipeline
+> works correctly. They do not represent performance on real card traffic. This is a
+> portfolio project demonstrating production ML engineering practices.
 
 ## Results (held-out final 20% of time, default config)
 
@@ -25,6 +27,7 @@ Recall by fraud pattern: card testing 98.7%, stolen card 96.9%, account takeover
 
 Model selection (selection split PR-AUC): logistic regression 0.744, random forest 0.892,
 **shallow gradient boosting 0.919**, deep gradient boosting 0.915.
+When LightGBM is installed, it is included as an additional candidate.
 
 ![Precision-recall](reports/precision_recall.png)
 
@@ -37,12 +40,13 @@ flowchart LR
   E --> R[(Registry and gate)]
   R --> A[HTTP API]
   Q[Transaction] --> A --> D[approve / review + reasons]
+  A --> DB[(SQLite state)]
   A --> M[Metrics and PSI drift]
 ```
 
 ## Quick start
 
-Needs Python 3.13 for the pinned versions. Run from the project root.
+Needs Python ≥3.11 (tested on 3.12 and 3.13). Run from the project root.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
@@ -56,7 +60,28 @@ fraudshield serve        # http://127.0.0.1:8000
 python scripts/demo.py   # in a second terminal
 ```
 
-Without `make` on Windows, use the commands above directly.
+### With persistent state (SQLite)
+
+```bash
+fraudshield serve --state-db state/customers.db
+```
+
+Customer history is now written to SQLite and survives process restarts.
+
+### Threshold tuning
+
+```bash
+fraudshield tune-threshold                          # uses default config
+fraudshield tune-threshold --review-cost 10         # more expensive reviews
+fraudshield tune-threshold --missed-fraud-multiplier 2.0  # add chargeback fees
+```
+
+### Optional: LightGBM candidate
+
+```bash
+pip install lightgbm
+fraudshield train  # LightGBM is now included in model comparison
+```
 
 Docker (the model is trained during the image build):
 
@@ -95,7 +120,11 @@ and `duplicate`. Errors: 401 bad key, 409 out-of-order or reused ID, 413 too lar
 - **No leakage:** features use only earlier events, splits are chronological, and the test
   split takes no part in selection, calibration or thresholding.
 - **PR-AUC over accuracy:** with about 1% fraud, approving everything is about 99% accurate.
-- **Cost-based threshold:** minimises review cost plus the value of missed fraud.
+- **Cost-based threshold:** minimises review cost plus the value of missed fraud, with a
+  configurable precision-recall tuner for different business cost assumptions.
+- **SQLite persistence:** customer state survives restarts without external infrastructure.
+- **LightGBM comparison:** when installed, LightGBM joins the candidate pool and its
+  performance is logged alongside scikit-learn models.
 - **Safe releases:** quality gate, atomic champion switch, checksum and version check.
 
 More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/MODEL_CARD.md](docs/MODEL_CARD.md).
@@ -120,23 +149,27 @@ lock, so more concurrency adds queueing, not throughput.
 fraudshield monitor --data data/transactions.csv.gz --since 2026-06-01
 ```
 
-Exit code 2 means PSI reached 0.25. The batch needs enough earlier history to warm up the
-features. Demo and load-test traffic is unlike training data, so it will raise drift alerts.
+Exit code 2 means PSI reached 0.25.
+
+## CI/CD
+
+The GitHub Actions pipeline (`make lint` → `make test` → `docker build`) runs on every
+push and PR against `main`, testing on Python 3.12 and 3.13. See the green checkmark on
+the latest commit.
 
 ## Known limitations
 
-- Customer state is in memory: one worker only, and a restart reverts to the training snapshot.
-  A real deployment needs a shared store (for example Redis) with atomic updates.
-- The duplicate cache holds the last 10,000 requests and is also lost on restart.
+- Scoring is serialised: one worker only, throughput does not scale with concurrency.
+- The duplicate cache holds the last 10,000 requests and is not persisted.
 - All transactions update history, including suspected fraud.
 - Labels are assumed available immediately; real chargebacks arrive weeks later.
 - No TLS or rate limiting: put the API behind a gateway.
-- Reason codes are one-feature sensitivity checks, not SHAP values, and skip category and hour.
+- Reason codes are one-feature sensitivity checks, not SHAP values.
 
 ## Roadmap
 
 1. Evaluate on a public real-world fraud dataset (needs its own feature adapter).
-2. Redis-backed feature state and multiple workers.
+2. Redis-backed feature state for multi-worker deployments.
 3. Label-delay-aware splits and scheduled retraining.
 4. Experiment tracking and SHAP explanations.
 
@@ -144,7 +177,7 @@ features. Demo and load-test traffic is unlike training data, so it will raise d
 
 ```
 src/fraudshield/   config, schema, data, features, models, serving, monitoring, cli
-tests/             data, feature, model and API tests
+tests/             data, feature, model, API, SQLite and threshold tuner tests
 configs/           YAML configuration
 scripts/           demo and load test
 reports/           metrics and plots from the reference run

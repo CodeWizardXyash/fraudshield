@@ -5,7 +5,12 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       FRAUDSHIELD_API_KEY: ${FRAUDSHIELD_API_KEY:?set FRAUDSHIELD_API_KEY}
+    volumes:
+      - fraudshield-state:/app/state
     read_only: true
     tmpfs:
       - /tmp
     restart: unless-stopped
+
+volumes:
+  fraudshield-state:
